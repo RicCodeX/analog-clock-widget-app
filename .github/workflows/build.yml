@@ -1,0 +1,247 @@
+name: Build Analog Clock APK
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Create project files
+        run: |
+          mkdir -p app/src/main/java/com/richard/analogclock
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/xml
+          mkdir -p app/src/main/res/drawable-nodpi
+
+          cat > settings.gradle.kts <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "AnalogClock"
+          include(":app")
+          EOF
+
+          cat > build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+          }
+          EOF
+
+          cat > app/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application")
+          }
+
+          android {
+              namespace = "com.richard.analogclock"
+              compileSdk = 34
+
+              defaultConfig {
+                  applicationId = "com.richard.analogclock"
+                  minSdk = 24
+                  targetSdk = 34
+                  versionCode = 1
+                  versionName = "1.0"
+              }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:label="Analog Clock"
+                  android:icon="@drawable/dial"
+                  android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+
+                  <receiver
+                      android:name=".ClockWidget"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                      </intent-filter>
+                      <meta-data
+                          android:name="android.appwidget.provider"
+                          android:resource="@xml/clock_widget_info" />
+                  </receiver>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/java/com/richard/analogclock/ClockWidget.java <<'EOF'
+          package com.richard.analogclock;
+
+          import android.appwidget.AppWidgetProvider;
+
+          public class ClockWidget extends AppWidgetProvider {
+          }
+          EOF
+
+          cat > app/src/main/java/com/richard/analogclock/MainActivity.java <<'EOF'
+          package com.richard.analogclock;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.view.Gravity;
+          import android.widget.TextView;
+
+          public class MainActivity extends Activity {
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  TextView t = new TextView(this);
+                  t.setText("Analog Clock is installed.\n\nTo add it: long-press your home screen, tap Widgets, find Analog Clock, and drag it onto your screen.");
+                  t.setTextSize(18);
+                  t.setGravity(Gravity.CENTER);
+                  t.setPadding(60, 60, 60, 60);
+                  setContentView(t);
+              }
+          }
+          EOF
+
+          cat > app/src/main/res/xml/clock_widget_info.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+              android:minWidth="110dp"
+              android:minHeight="110dp"
+              android:targetCellWidth="2"
+              android:targetCellHeight="2"
+              android:minResizeWidth="40dp"
+              android:minResizeHeight="40dp"
+              android:resizeMode="horizontal|vertical"
+              android:initialLayout="@layout/widget_clock"
+              android:updatePeriodMillis="0"
+              android:widgetCategory="home_screen" />
+          EOF
+
+          cat > app/src/main/res/layout/widget_clock.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent">
+
+              <AnalogClock
+                  android:layout_width="match_parent"
+                  android:layout_height="match_parent"
+                  android:layout_gravity="center"
+                  android:dial="@drawable/dial"
+                  android:hand_hour="@drawable/hand_hour"
+                  android:hand_minute="@drawable/hand_minute"
+                  android:hand_second="@drawable/hand_second" />
+          </FrameLayout>
+          EOF
+
+      - name: Draw clock face and hands
+        run: |
+          pip install pillow
+          python3 - <<'PY'
+          import math, os
+          from PIL import Image, ImageDraw, ImageFont
+
+          S = 1600
+          C = S // 2
+          OUT = 'app/src/main/res/drawable-nodpi'
+          os.makedirs(OUT, exist_ok=True)
+
+          def save(img, name):
+              img.resize((800, 800), Image.LANCZOS).save(f'{OUT}/{name}.png')
+
+          WHITE = (240, 240, 240, 255)
+          RED = (255, 69, 58, 255)
+
+          # Dial
+          img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+          d = ImageDraw.Draw(img)
+          d.ellipse([20, 20, S - 20, S - 20], fill=(18, 18, 20, 255))
+          d.ellipse([20, 20, S - 20, S - 20], outline=WHITE, width=24)
+          for i in range(60):
+              a = math.radians(i * 6)
+              big = (i % 5 == 0)
+              r1 = C - 70
+              r2 = r1 - (70 if big else 32)
+              w = 14 if big else 6
+              d.line([C + r1 * math.sin(a), C - r1 * math.cos(a),
+                      C + r2 * math.sin(a), C - r2 * math.cos(a)],
+                     fill=WHITE, width=w)
+          try:
+              font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 130)
+          except Exception:
+              font = ImageFont.load_default(size=130)
+          for n in range(1, 13):
+              a = math.radians(n * 30)
+              r = C - 270
+              d.text((C + r * math.sin(a), C - r * math.cos(a)), str(n),
+                     font=font, fill=(255, 255, 255, 255), anchor='mm')
+          save(img, 'dial')
+
+          def hand(name, width, top, bottom, color, hub=0):
+              im = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+              dr = ImageDraw.Draw(im)
+              dr.rounded_rectangle([C - width / 2, C - top, C + width / 2, C + bottom],
+                                   radius=width / 2, fill=color)
+              if hub:
+                  dr.ellipse([C - hub, C - hub, C + hub, C + hub], fill=color)
+              save(im, name)
+
+          hand('hand_hour', 44, 400, 90, WHITE)
+          hand('hand_minute', 30, 640, 110, WHITE)
+          hand('hand_second', 10, 700, 190, RED, hub=34)
+          PY
+
+      - name: Build APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Name the APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk AnalogClock.apk
+
+      - name: Publish release with APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: Analog Clock v${{ github.run_number }}
+          files: AnalogClock.apk
