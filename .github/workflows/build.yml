@@ -29,10 +29,7 @@ jobs:
 
       - name: Create project files
         run: |
-          mkdir -p app/src/main/java/com/richard/analogclock
-          mkdir -p app/src/main/res/layout
-          mkdir -p app/src/main/res/xml
-          mkdir -p app/src/main/res/drawable-nodpi
+          mkdir -p app/src/main/java/com/richard/analogclock app/src/main/res/layout app/src/main/res/xml app/src/main/res/drawable-nodpi
 
           cat > settings.gradle.kts <<'EOF'
           pluginManagement {
@@ -71,8 +68,8 @@ jobs:
                   applicationId = "com.richard.analogclock"
                   minSdk = 24
                   targetSdk = 34
-                  versionCode = 1
-                  versionName = "1.0"
+                  versionCode = 2
+                  versionName = "2.0"
               }
 
               compileOptions {
@@ -87,7 +84,7 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application
                   android:label="Analog Clock"
-                  android:icon="@drawable/dial"
+                  android:icon="@drawable/preview_classic"
                   android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
 
                   <activity
@@ -100,25 +97,68 @@ jobs:
                   </activity>
 
                   <receiver
-                      android:name=".ClockWidget"
+                      android:name=".ClassicWidget"
+                      android:label="Clock: Classic"
                       android:exported="true">
                       <intent-filter>
                           <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                       </intent-filter>
                       <meta-data
                           android:name="android.appwidget.provider"
-                          android:resource="@xml/clock_widget_info" />
+                          android:resource="@xml/classic_info" />
+                  </receiver>
+
+                  <receiver
+                      android:name=".DateWidget"
+                      android:label="Clock: Date"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                      </intent-filter>
+                      <meta-data
+                          android:name="android.appwidget.provider"
+                          android:resource="@xml/date_info" />
+                  </receiver>
+
+                  <receiver
+                      android:name=".BlueWidget"
+                      android:label="Clock: Blue"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                      </intent-filter>
+                      <meta-data
+                          android:name="android.appwidget.provider"
+                          android:resource="@xml/blue_info" />
                   </receiver>
               </application>
           </manifest>
           EOF
 
-          cat > app/src/main/java/com/richard/analogclock/ClockWidget.java <<'EOF'
+          cat > app/src/main/java/com/richard/analogclock/ClassicWidget.java <<'EOF'
           package com.richard.analogclock;
 
           import android.appwidget.AppWidgetProvider;
 
-          public class ClockWidget extends AppWidgetProvider {
+          public class ClassicWidget extends AppWidgetProvider {
+          }
+          EOF
+
+          cat > app/src/main/java/com/richard/analogclock/DateWidget.java <<'EOF'
+          package com.richard.analogclock;
+
+          import android.appwidget.AppWidgetProvider;
+
+          public class DateWidget extends AppWidgetProvider {
+          }
+          EOF
+
+          cat > app/src/main/java/com/richard/analogclock/BlueWidget.java <<'EOF'
+          package com.richard.analogclock;
+
+          import android.appwidget.AppWidgetProvider;
+
+          public class BlueWidget extends AppWidgetProvider {
           }
           EOF
 
@@ -135,7 +175,7 @@ jobs:
               protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
                   TextView t = new TextView(this);
-                  t.setText("Analog Clock is installed.\n\nTo add it: long-press your home screen, tap Widgets, find Analog Clock, and drag it onto your screen.");
+                  t.setText("Analog Clock is installed.\n\nTo add a clock: long-press your home screen, tap Widgets, find Analog Clock, and choose one of the three looks: Classic, Date or Blue.");
                   t.setTextSize(18);
                   t.setGravity(Gravity.CENTER);
                   t.setPadding(60, 60, 60, 60);
@@ -144,7 +184,7 @@ jobs:
           }
           EOF
 
-          cat > app/src/main/res/xml/clock_widget_info.xml <<'EOF'
+          cat > app/src/main/res/xml/classic_info.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
               android:minWidth="110dp"
@@ -154,12 +194,43 @@ jobs:
               android:minResizeWidth="40dp"
               android:minResizeHeight="40dp"
               android:resizeMode="horizontal|vertical"
-              android:initialLayout="@layout/widget_clock"
+              android:previewImage="@drawable/preview_classic"
+              android:initialLayout="@layout/widget_classic"
               android:updatePeriodMillis="0"
               android:widgetCategory="home_screen" />
           EOF
 
-          cat > app/src/main/res/layout/widget_clock.xml <<'EOF'
+          cat > app/src/main/res/xml/date_info.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+              android:minWidth="180dp"
+              android:minHeight="180dp"
+              android:targetCellWidth="3"
+              android:targetCellHeight="3"
+              android:resizeMode="none"
+              android:previewImage="@drawable/preview_date"
+              android:initialLayout="@layout/widget_date"
+              android:updatePeriodMillis="0"
+              android:widgetCategory="home_screen" />
+          EOF
+
+          cat > app/src/main/res/xml/blue_info.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+              android:minWidth="110dp"
+              android:minHeight="110dp"
+              android:targetCellWidth="2"
+              android:targetCellHeight="2"
+              android:minResizeWidth="40dp"
+              android:minResizeHeight="40dp"
+              android:resizeMode="horizontal|vertical"
+              android:previewImage="@drawable/preview_blue"
+              android:initialLayout="@layout/widget_blue"
+              android:updatePeriodMillis="0"
+              android:widgetCategory="home_screen" />
+          EOF
+
+          cat > app/src/main/res/layout/widget_classic.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:layout_width="match_parent"
@@ -169,20 +240,105 @@ jobs:
                   android:layout_width="match_parent"
                   android:layout_height="match_parent"
                   android:layout_gravity="center"
-                  android:dial="@drawable/dial"
-                  android:hand_hour="@drawable/hand_hour"
-                  android:hand_minute="@drawable/hand_minute"
-                  android:hand_second="@drawable/hand_second" />
+                  android:dial="@drawable/classic_dial"
+                  android:hand_hour="@drawable/classic_hour"
+                  android:hand_minute="@drawable/classic_min"
+                  android:hand_second="@drawable/classic_sec" />
           </FrameLayout>
           EOF
 
-      - name: Draw clock face and hands
+          cat > app/src/main/res/layout/widget_date.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent">
+
+              <AnalogClock
+                  android:layout_width="match_parent"
+                  android:layout_height="match_parent"
+                  android:layout_gravity="center"
+                  android:dial="@drawable/date_dial"
+                  android:hand_hour="@drawable/classic_hour"
+                  android:hand_minute="@drawable/classic_min"
+                  android:hand_second="@drawable/classic_sec" />
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="match_parent"
+                  android:orientation="vertical">
+
+                  <FrameLayout
+                      android:layout_width="match_parent"
+                      android:layout_height="0dp"
+                      android:layout_weight="44.06" />
+
+                  <LinearLayout
+                      android:layout_width="match_parent"
+                      android:layout_height="0dp"
+                      android:layout_weight="11.88"
+                      android:orientation="horizontal">
+
+                      <FrameLayout
+                          android:layout_width="0dp"
+                          android:layout_height="match_parent"
+                          android:layout_weight="74.69" />
+
+                      <TextClock
+                          android:layout_width="0dp"
+                          android:layout_height="match_parent"
+                          android:layout_weight="13.75"
+                          android:gravity="center"
+                          android:padding="0dp"
+                          android:includeFontPadding="false"
+                          android:format12Hour="d"
+                          android:format24Hour="d"
+                          android:fontFamily="sans-serif-medium"
+                          android:textColor="#111111"
+                          android:autoSizeTextType="uniform"
+                          android:autoSizeMinTextSize="6sp"
+                          android:autoSizeMaxTextSize="40sp"
+                          android:autoSizeStepGranularity="1sp" />
+
+                      <FrameLayout
+                          android:layout_width="0dp"
+                          android:layout_height="match_parent"
+                          android:layout_weight="11.56" />
+                  </LinearLayout>
+
+                  <FrameLayout
+                      android:layout_width="match_parent"
+                      android:layout_height="0dp"
+                      android:layout_weight="44.06" />
+              </LinearLayout>
+          </FrameLayout>
+          EOF
+
+          cat > app/src/main/res/layout/widget_blue.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent">
+
+              <AnalogClock
+                  android:layout_width="match_parent"
+                  android:layout_height="match_parent"
+                  android:layout_gravity="center"
+                  android:dial="@drawable/blue_dial"
+                  android:hand_hour="@drawable/blue_hour"
+                  android:hand_minute="@drawable/blue_min"
+                  android:hand_second="@drawable/blue_sec" />
+          </FrameLayout>
+          EOF
+
+      - name: Draw clock faces and hands
         run: |
           pip install pillow
-          curl -fsSL -o Poppins-Medium.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Medium.ttf || true
+          B=https://raw.githubusercontent.com/google/fonts/main/ofl
+          curl -fsSL -o Lato-Bold.ttf $B/lato/Lato-Bold.ttf || true
+          curl -fsSL -o Michroma-Regular.ttf $B/michroma/Michroma-Regular.ttf || true
           python3 - <<'PY'
           import math, os
-          from PIL import Image, ImageDraw, ImageFont, ImageFilter
+          from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageChops
 
           S = 1600
           C = S // 2
@@ -190,22 +346,21 @@ jobs:
           os.makedirs(OUT, exist_ok=True)
 
           WHITE = (242, 242, 242, 255)
+          PURE = (255, 255, 255, 255)
           RED = (255, 69, 58, 255)
-          FACE_EDGE = (10, 10, 12)
-          FACE_MID = (38, 38, 43)
+          SILVER = (208, 212, 218, 255)
 
 
-          def save(img, name):
-              img.resize((800, 800), Image.LANCZOS).save(f'{OUT}/{name}.png')
+          def save(img, name, size=800):
+              img.resize((size, size), Image.LANCZOS).save(f'{OUT}/{name}.png')
 
 
           def lerp(a, b, t):
               return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(len(a)))
 
 
-          def load_font(size):
-              for p in ('Poppins-Medium.ttf',
-                        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'):
+          def load_font(files, size):
+              for p in files + ['/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf']:
                   try:
                       return ImageFont.truetype(p, size)
                   except Exception:
@@ -213,55 +368,100 @@ jobs:
               return ImageFont.load_default(size=size)
 
 
-          # ---------- Dial ----------
-          img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
-          d = ImageDraw.Draw(img)
+          def disc(d, r, fill):
+              d.ellipse([C - r, C - r, C + r, C + r], fill=fill)
 
-          R_OUT, R_BEZ = 790, 745
-          for r in range(R_OUT, R_BEZ, -1):
-              t = (R_OUT - r) / (R_OUT - R_BEZ)
-              d.ellipse([C - r, C - r, C + r, C + r],
-                        fill=lerp((240, 240, 244), (105, 105, 114), t) + (255,))
 
-          d.ellipse([C - R_BEZ, C - R_BEZ, C + R_BEZ, C + R_BEZ], fill=(0, 0, 0, 255))
-
-          R_FACE = R_BEZ - 8
-          for r in range(R_FACE, 0, -2):
-              t = ((R_FACE - r) / R_FACE) ** 1.2
-              d.ellipse([C - r, C - r, C + r, C + r],
-                        fill=lerp(FACE_EDGE, FACE_MID, t) + (255,))
-
-          for i in range(60):
-              a = math.radians(i * 6)
-              big = (i % 5 == 0)
-              r1 = 712
-              r2 = r1 - (62 if big else 26)
-              w = 15 if big else 6
-              d.line([C + r1 * math.sin(a), C - r1 * math.cos(a),
-                      C + r2 * math.sin(a), C - r2 * math.cos(a)],
-                     fill=WHITE, width=w)
-
-          font = load_font(140)
-          for n in range(1, 13):
-              a = math.radians(n * 30)
-              r = 520
-              s = str(n)
-              bb = d.textbbox((0, 0), s, font=font)
+          def put_number(d, s, cx, cy, font, fill, stroke=0):
+              bb = d.textbbox((0, 0), s, font=font, stroke_width=stroke)
               w, h = bb[2] - bb[0], bb[3] - bb[1]
-              x = C + r * math.sin(a) - w / 2 - bb[0]
-              y = C - r * math.cos(a) - h / 2 - bb[1]
-              d.text((x, y), s, font=font, fill=WHITE)
+              d.text((cx - w / 2 - bb[0], cy - h / 2 - bb[1]), s, font=font, fill=fill,
+                     stroke_width=stroke, stroke_fill=fill)
 
-          save(img, 'dial')
+
+          def polar(r, deg):
+              a = math.radians(deg)
+              return C + r * math.sin(a), C - r * math.cos(a)
+
+
+          # ---------- Dials ----------
+          def classic_dial(with_date):
+              img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+              d = ImageDraw.Draw(img)
+              R_OUT, R_BEZ = 790, 745
+              for r in range(R_OUT, R_BEZ, -1):
+                  t = (R_OUT - r) / (R_OUT - R_BEZ)
+                  disc(d, r, lerp((240, 240, 244), (105, 105, 114), t) + (255,))
+              disc(d, R_BEZ, (0, 0, 0, 255))
+              R_FACE = R_BEZ - 8
+              for r in range(R_FACE, 0, -2):
+                  t = ((R_FACE - r) / R_FACE) ** 1.2
+                  disc(d, r, lerp((10, 10, 12), (38, 38, 43), t) + (255,))
+              for i in range(60):
+                  big = (i % 5 == 0)
+                  r1 = 712
+                  r2 = r1 - (62 if big else 26)
+                  d.line([polar(r1, i * 6), polar(r2, i * 6)], fill=WHITE, width=15 if big else 6)
+              font = load_font(['Lato-Bold.ttf'], 165)
+              for n in range(1, 13):
+                  if with_date and n == 3:
+                      continue
+                  x, y = polar(515, n * 30)
+                  put_number(d, str(n), x, y, font, WHITE)
+              if with_date:
+                  x0, x1, y0, y1 = C + 395, C + 615, C - 95, C + 95
+                  for i in range(10):
+                      d.rounded_rectangle([x0 - 10 + i, y0 - 10 + i, x1 + 10 - i, y1 + 10 - i],
+                                          radius=22 - i,
+                                          fill=lerp((236, 236, 240), (120, 120, 128), i / 9) + (255,))
+                  d.rounded_rectangle([x0, y0, x1, y1], radius=10, fill=(248, 248, 245, 255))
+                  for i in range(14):
+                      d.line([x0 + 8, y0 + i, x1 - 8, y0 + i],
+                             fill=lerp((196, 196, 200), (248, 248, 245), i / 14) + (255,))
+              return img
+
+
+          def blue_dial():
+              img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+              d = ImageDraw.Draw(img)
+              R_OUT, R_BEZ = 790, 738
+              for r in range(R_OUT, R_BEZ, -1):
+                  t = (R_OUT - r) / (R_OUT - R_BEZ)
+                  disc(d, r, lerp((62, 108, 160), (14, 34, 70), t) + (255,))
+              R_FACE = R_BEZ - 4
+              for r in range(R_FACE, 0, -2):
+                  t = ((R_FACE - r) / R_FACE) ** 1.3
+                  disc(d, r, lerp((20, 66, 102), (38, 104, 142), t) + (255,))
+              # glass reflection: soft crescent at the top left
+              m1 = Image.new('L', (S, S), 0)
+              ImageDraw.Draw(m1).ellipse([C - R_FACE, C - R_FACE, C + R_FACE, C + R_FACE], fill=255)
+              m2 = Image.new('L', (S, S), 0)
+              ImageDraw.Draw(m2).ellipse([C - R_FACE + 150, C - R_FACE + 170,
+                                          C + R_FACE + 150, C + R_FACE + 170], fill=255)
+              cres = ImageChops.multiply(ImageChops.subtract(m1, m2).filter(ImageFilter.GaussianBlur(24)), m1).point(lambda v: int(v * 0.0008 * 255 * 0.55)) if False else ImageChops.multiply(ImageChops.subtract(m1, m2).filter(ImageFilter.GaussianBlur(24)), m1).point(lambda v: int(v * v / 255 * 0.14))
+              glow = Image.new('RGBA', (S, S), (255, 255, 255, 0))
+              glow.putalpha(cres)
+              img = Image.alpha_composite(img, glow)
+              d = ImageDraw.Draw(img)
+              for i in range(60):
+                  big = (i % 5 == 0)
+                  r1 = 712
+                  r2 = r1 - (44 if big else 26)
+                  d.line([polar(r1, i * 6), polar(r2, i * 6)], fill=PURE, width=11 if big else 6)
+              font = load_font(['Michroma-Regular.ttf'], 118)
+              for n in range(1, 13):
+                  x, y = polar(500, n * 30)
+                  put_number(d, str(n), x, y, font, PURE, stroke=5)
+              return img
 
 
           # ---------- Hands ----------
-          def make_hand(name, shapes, color, dot=None):
+          def make_hand(shapes, dot=None):
               layer = Image.new('RGBA', (S, S), (0, 0, 0, 0))
               dl = ImageDraw.Draw(layer)
               mask = Image.new('L', (S, S), 0)
               dm = ImageDraw.Draw(mask)
-              for kind, data in shapes:
+              for kind, data, color in shapes:
                   if kind == 'poly':
                       pts = [(C + x, C + y) for x, y in data]
                       dl.polygon(pts, fill=color)
@@ -275,23 +475,65 @@ jobs:
               shadow.putalpha(mask.filter(ImageFilter.GaussianBlur(14)).point(lambda v: int(v * 0.6)))
               out = Image.alpha_composite(shadow, layer)
               if dot:
-                  ImageDraw.Draw(out).ellipse([C - dot, C - dot, C + dot, C + dot], fill=(18, 18, 20, 255))
-              save(out, name)
+                  r, col = dot
+                  ImageDraw.Draw(out).ellipse([C - r, C - r, C + r, C + r], fill=col)
+              return out
 
 
-          def blade(hw, length, tail):
-              return ('poly', [(-hw * 0.55, tail), (-hw, 0), (-hw * 0.8, -length * 0.72),
-                               (0, -length), (hw * 0.8, -length * 0.72), (hw, 0),
-                               (hw * 0.55, tail)])
+          def needle(hw, length, tail, color):
+              # widest at the hub, one straight taper to a sharp point
+              return ('poly', [(-hw * 0.6, tail), (-hw, 0), (0, -length), (hw, 0), (hw * 0.6, tail)], color)
 
 
-          make_hand('hand_hour', [blade(30, 420, 110)], WHITE)
-          make_hand('hand_minute', [blade(21, 660, 130)], WHITE)
-          make_hand('hand_second', [
-              ('poly', [(-6, 210), (-7, 0), (0, -720), (7, 0), (6, 210)]),
-              ('circle', (0, 150, 30)),
-              ('circle', (0, 0, 42)),
-          ], RED, dot=14)
+          def bar(hw, length, tail, color):
+              return ('poly', [(-hw, tail), (-hw, -length + hw * 1.6), (0, -length),
+                               (hw, -length + hw * 1.6), (hw, tail)], color)
+
+
+          classic_hour = make_hand([needle(32, 430, 110, WHITE)])
+          classic_min = make_hand([needle(22, 670, 130, WHITE)])
+          classic_sec = make_hand([
+              ('poly', [(-6, 210), (-7, 0), (0, -730), (7, 0), (6, 210)], RED),
+              ('circle', (0, 150, 30), RED),
+              ('circle', (0, 0, 42), RED),
+          ], dot=(14, (18, 18, 20, 255)))
+
+          blue_hour = make_hand([bar(26, 430, 90, PURE)])
+          blue_min = make_hand([bar(18, 660, 110, PURE)])
+          blue_sec = make_hand([
+              ('poly', [(-4, 250), (-4, -700), (0, -745), (4, -700), (4, 250)], PURE),
+              ('circle', (0, 0, 46), SILVER),
+          ], dot=(16, (110, 116, 126, 255)))
+
+          # ---------- Save the artwork ----------
+          d_classic = classic_dial(False)
+          d_date = classic_dial(True)
+          d_blue = blue_dial()
+          save(d_classic, 'classic_dial')
+          save(d_date, 'date_dial')
+          save(d_blue, 'blue_dial')
+          for name, img in (('classic_hour', classic_hour), ('classic_min', classic_min),
+                            ('classic_sec', classic_sec), ('blue_hour', blue_hour),
+                            ('blue_min', blue_min), ('blue_sec', blue_sec)):
+              save(img, name)
+
+
+          # ---------- Previews for the widget picker (clock at 10:10:30) ----------
+          def preview(name, dial, hands, date_text=None):
+              base = dial.resize((800, 800), Image.LANCZOS)
+              if date_text:
+                  dd = ImageDraw.Draw(base)
+                  put_number(dd, date_text, 400 + 252, 400, load_font(['Lato-Bold.ttf'], 74), (17, 17, 17, 255))
+              for hand_img, deg in zip(hands, (10 * 30 + 5, 10 * 6 + 3, 30 * 6)):
+                  h = hand_img.resize((800, 800), Image.LANCZOS).rotate(-deg, resample=Image.BICUBIC)
+                  base = Image.alpha_composite(base, h)
+              base.resize((400, 400), Image.LANCZOS).save(f'{OUT}/preview_{name}.png')
+              return base
+
+
+          preview('classic', d_classic, (classic_hour, classic_min, classic_sec))
+          preview('date', d_date, (classic_hour, classic_min, classic_sec), '19')
+          preview('blue', d_blue, (blue_hour, blue_min, blue_sec))
           PY
 
       - name: Build APK
