@@ -179,58 +179,119 @@ jobs:
       - name: Draw clock face and hands
         run: |
           pip install pillow
+          curl -fsSL -o Poppins-Medium.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Medium.ttf || true
           python3 - <<'PY'
           import math, os
-          from PIL import Image, ImageDraw, ImageFont
+          from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
           S = 1600
           C = S // 2
           OUT = 'app/src/main/res/drawable-nodpi'
           os.makedirs(OUT, exist_ok=True)
 
+          WHITE = (242, 242, 242, 255)
+          RED = (255, 69, 58, 255)
+          FACE_EDGE = (10, 10, 12)
+          FACE_MID = (38, 38, 43)
+
+
           def save(img, name):
               img.resize((800, 800), Image.LANCZOS).save(f'{OUT}/{name}.png')
 
-          WHITE = (240, 240, 240, 255)
-          RED = (255, 69, 58, 255)
 
-          # Dial
+          def lerp(a, b, t):
+              return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(len(a)))
+
+
+          def load_font(size):
+              for p in ('Poppins-Medium.ttf',
+                        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'):
+                  try:
+                      return ImageFont.truetype(p, size)
+                  except Exception:
+                      pass
+              return ImageFont.load_default(size=size)
+
+
+          # ---------- Dial ----------
           img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
           d = ImageDraw.Draw(img)
-          d.ellipse([20, 20, S - 20, S - 20], fill=(18, 18, 20, 255))
-          d.ellipse([20, 20, S - 20, S - 20], outline=WHITE, width=24)
+
+          R_OUT, R_BEZ = 790, 745
+          for r in range(R_OUT, R_BEZ, -1):
+              t = (R_OUT - r) / (R_OUT - R_BEZ)
+              d.ellipse([C - r, C - r, C + r, C + r],
+                        fill=lerp((240, 240, 244), (105, 105, 114), t) + (255,))
+
+          d.ellipse([C - R_BEZ, C - R_BEZ, C + R_BEZ, C + R_BEZ], fill=(0, 0, 0, 255))
+
+          R_FACE = R_BEZ - 8
+          for r in range(R_FACE, 0, -2):
+              t = ((R_FACE - r) / R_FACE) ** 1.2
+              d.ellipse([C - r, C - r, C + r, C + r],
+                        fill=lerp(FACE_EDGE, FACE_MID, t) + (255,))
+
           for i in range(60):
               a = math.radians(i * 6)
               big = (i % 5 == 0)
-              r1 = C - 70
-              r2 = r1 - (70 if big else 32)
-              w = 14 if big else 6
+              r1 = 712
+              r2 = r1 - (62 if big else 26)
+              w = 15 if big else 6
               d.line([C + r1 * math.sin(a), C - r1 * math.cos(a),
                       C + r2 * math.sin(a), C - r2 * math.cos(a)],
                      fill=WHITE, width=w)
-          try:
-              font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 130)
-          except Exception:
-              font = ImageFont.load_default(size=130)
+
+          font = load_font(140)
           for n in range(1, 13):
               a = math.radians(n * 30)
-              r = C - 270
-              d.text((C + r * math.sin(a), C - r * math.cos(a)), str(n),
-                     font=font, fill=(255, 255, 255, 255), anchor='mm')
+              r = 520
+              s = str(n)
+              bb = d.textbbox((0, 0), s, font=font)
+              w, h = bb[2] - bb[0], bb[3] - bb[1]
+              x = C + r * math.sin(a) - w / 2 - bb[0]
+              y = C - r * math.cos(a) - h / 2 - bb[1]
+              d.text((x, y), s, font=font, fill=WHITE)
+
           save(img, 'dial')
 
-          def hand(name, width, top, bottom, color, hub=0):
-              im = Image.new('RGBA', (S, S), (0, 0, 0, 0))
-              dr = ImageDraw.Draw(im)
-              dr.rounded_rectangle([C - width / 2, C - top, C + width / 2, C + bottom],
-                                   radius=width / 2, fill=color)
-              if hub:
-                  dr.ellipse([C - hub, C - hub, C + hub, C + hub], fill=color)
-              save(im, name)
 
-          hand('hand_hour', 44, 400, 90, WHITE)
-          hand('hand_minute', 30, 640, 110, WHITE)
-          hand('hand_second', 10, 700, 190, RED, hub=34)
+          # ---------- Hands ----------
+          def make_hand(name, shapes, color, dot=None):
+              layer = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+              dl = ImageDraw.Draw(layer)
+              mask = Image.new('L', (S, S), 0)
+              dm = ImageDraw.Draw(mask)
+              for kind, data in shapes:
+                  if kind == 'poly':
+                      pts = [(C + x, C + y) for x, y in data]
+                      dl.polygon(pts, fill=color)
+                      dm.polygon(pts, fill=255)
+                  else:
+                      cx, cy, r = data
+                      box = [C + cx - r, C + cy - r, C + cx + r, C + cy + r]
+                      dl.ellipse(box, fill=color)
+                      dm.ellipse(box, fill=255)
+              shadow = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+              shadow.putalpha(mask.filter(ImageFilter.GaussianBlur(14)).point(lambda v: int(v * 0.6)))
+              out = Image.alpha_composite(shadow, layer)
+              if dot:
+                  ImageDraw.Draw(out).ellipse([C - dot, C - dot, C + dot, C + dot], fill=(18, 18, 20, 255))
+              save(out, name)
+
+
+          def blade(hw, length, tail):
+              return ('poly', [(-hw * 0.55, tail), (-hw, 0), (-hw * 0.8, -length * 0.72),
+                               (0, -length), (hw * 0.8, -length * 0.72), (hw, 0),
+                               (hw * 0.55, tail)])
+
+
+          make_hand('hand_hour', [blade(30, 420, 110)], WHITE)
+          make_hand('hand_minute', [blade(21, 660, 130)], WHITE)
+          make_hand('hand_second', [
+              ('poly', [(-6, 210), (-7, 0), (0, -720), (7, 0), (6, 210)]),
+              ('circle', (0, 150, 30)),
+              ('circle', (0, 0, 42)),
+          ], RED, dot=14)
           PY
 
       - name: Build APK
