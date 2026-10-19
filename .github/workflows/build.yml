@@ -29,7 +29,7 @@ jobs:
 
       - name: Create project files
         run: |
-          mkdir -p app/src/main/java/com/richard/analogclock app/src/main/res/layout app/src/main/res/xml app/src/main/res/drawable-nodpi
+          mkdir -p app/src/main/java/com/richard/analogclock app/src/main/res/layout app/src/main/res/xml app/src/main/res/drawable app/src/main/res/drawable-nodpi
 
           cat > settings.gradle.kts <<'EOF'
           pluginManagement {
@@ -114,6 +114,9 @@ jobs:
                       android:exported="true">
                       <intent-filter>
                           <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                          <action android:name="android.intent.action.DATE_CHANGED" />
+                          <action android:name="android.intent.action.TIME_SET" />
+                          <action android:name="android.intent.action.TIMEZONE_CHANGED" />
                       </intent-filter>
                       <meta-data
                           android:name="android.appwidget.provider"
@@ -147,9 +150,88 @@ jobs:
           cat > app/src/main/java/com/richard/analogclock/DateWidget.java <<'EOF'
           package com.richard.analogclock;
 
+          import android.app.AlarmManager;
+          import android.app.PendingIntent;
+          import android.appwidget.AppWidgetManager;
           import android.appwidget.AppWidgetProvider;
+          import android.content.ComponentName;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.widget.RemoteViews;
+
+          import java.util.Calendar;
 
           public class DateWidget extends AppWidgetProvider {
+
+              private static final String ACTION_MIDNIGHT = "com.richard.analogclock.MIDNIGHT";
+
+              @Override
+              public void onUpdate(Context context, AppWidgetManager manager, int[] ids) {
+                  refresh(context, manager, ids);
+                  scheduleMidnight(context);
+              }
+
+              @Override
+              public void onEnabled(Context context) {
+                  scheduleMidnight(context);
+              }
+
+              @Override
+              public void onDisabled(Context context) {
+                  AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+                  am.cancel(midnightIntent(context));
+              }
+
+              @Override
+              public void onReceive(Context context, Intent intent) {
+                  super.onReceive(context, intent);
+                  String action = intent.getAction();
+                  if (ACTION_MIDNIGHT.equals(action)
+                          || Intent.ACTION_DATE_CHANGED.equals(action)
+                          || Intent.ACTION_TIME_CHANGED.equals(action)
+                          || Intent.ACTION_TIMEZONE_CHANGED.equals(action)) {
+                      AppWidgetManager manager = AppWidgetManager.getInstance(context);
+                      int[] ids = manager.getAppWidgetIds(new ComponentName(context, DateWidget.class));
+                      refresh(context, manager, ids);
+                      scheduleMidnight(context);
+                  }
+              }
+
+              private static void refresh(Context context, AppWidgetManager manager, int[] ids) {
+                  Calendar now = Calendar.getInstance();
+                  int dayOfWeek = now.get(Calendar.DAY_OF_WEEK) - 1; // 0 = Sunday
+                  int dayOfMonth = now.get(Calendar.DAY_OF_MONTH);
+                  String pkg = context.getPackageName();
+                  int dayRes = context.getResources().getIdentifier("day_" + dayOfWeek, "drawable", pkg);
+                  int dateRes = context.getResources().getIdentifier("date_" + dayOfMonth, "drawable", pkg);
+                  for (int id : ids) {
+                      RemoteViews views = new RemoteViews(pkg, R.layout.widget_date);
+                      if (dayRes != 0) {
+                          views.setImageViewResource(R.id.day_overlay, dayRes);
+                      }
+                      if (dateRes != 0) {
+                          views.setImageViewResource(R.id.date_overlay, dateRes);
+                      }
+                      manager.updateAppWidget(id, views);
+                  }
+              }
+
+              private static PendingIntent midnightIntent(Context context) {
+                  Intent intent = new Intent(context, DateWidget.class).setAction(ACTION_MIDNIGHT);
+                  return PendingIntent.getBroadcast(context, 0, intent,
+                          PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+              }
+
+              private static void scheduleMidnight(Context context) {
+                  AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+                  Calendar next = Calendar.getInstance();
+                  next.add(Calendar.DAY_OF_YEAR, 1);
+                  next.set(Calendar.HOUR_OF_DAY, 0);
+                  next.set(Calendar.MINUTE, 0);
+                  next.set(Calendar.SECOND, 5);
+                  next.set(Calendar.MILLISECOND, 0);
+                  am.set(AlarmManager.RTC, next.getTimeInMillis(), midnightIntent(context));
+              }
           }
           EOF
 
@@ -184,6 +266,17 @@ jobs:
           }
           EOF
 
+          cat > app/src/main/res/drawable/date_clear.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"
+              android:shape="rectangle">
+              <solid android:color="#00000000" />
+              <size
+                  android:width="1000px"
+                  android:height="1000px" />
+          </shape>
+          EOF
+
           cat > app/src/main/res/xml/classic_info.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
@@ -207,12 +300,10 @@ jobs:
               android:minHeight="180dp"
               android:targetCellWidth="3"
               android:targetCellHeight="3"
-              android:minResizeWidth="110dp"
-              android:minResizeHeight="110dp"
-              android:resizeMode="horizontal|vertical"
+              android:resizeMode="none"
               android:previewImage="@drawable/preview_date"
               android:initialLayout="@layout/widget_date"
-              android:updatePeriodMillis="0"
+              android:updatePeriodMillis="1800000"
               android:widgetCategory="home_screen" />
           EOF
 
@@ -255,114 +346,35 @@ jobs:
               android:layout_width="match_parent"
               android:layout_height="match_parent">
 
+              <ImageView
+                  android:id="@+id/date_face"
+                  android:layout_width="match_parent"
+                  android:layout_height="match_parent"
+                  android:scaleType="centerInside"
+                  android:src="@drawable/date_dial" />
+
+              <ImageView
+                  android:id="@+id/day_overlay"
+                  android:layout_width="match_parent"
+                  android:layout_height="match_parent"
+                  android:scaleType="centerInside"
+                  android:src="@drawable/day_1" />
+
+              <ImageView
+                  android:id="@+id/date_overlay"
+                  android:layout_width="match_parent"
+                  android:layout_height="match_parent"
+                  android:scaleType="centerInside"
+                  android:src="@drawable/date_1" />
+
               <AnalogClock
                   android:layout_width="match_parent"
                   android:layout_height="match_parent"
                   android:layout_gravity="center"
-                  android:dial="@drawable/date_dial"
-                  android:hand_hour="@drawable/classic_hour"
-                  android:hand_minute="@drawable/classic_min"
-                  android:hand_second="@drawable/classic_sec" />
-
-              <LinearLayout
-                  android:layout_width="match_parent"
-                  android:layout_height="match_parent"
-                  android:orientation="vertical">
-
-                  <FrameLayout
-                      android:layout_width="match_parent"
-                      android:layout_height="0dp"
-                      android:layout_weight="44.06" />
-
-                  <LinearLayout
-                      android:layout_width="match_parent"
-                      android:layout_height="0dp"
-                      android:layout_weight="11.88"
-                      android:orientation="horizontal">
-
-                      <FrameLayout
-                          android:layout_width="0dp"
-                          android:layout_height="match_parent"
-                          android:layout_weight="74.69" />
-
-                      <TextClock
-                          android:layout_width="0dp"
-                          android:layout_height="match_parent"
-                          android:layout_weight="13.75"
-                          android:gravity="center"
-                          android:padding="0dp"
-                          android:includeFontPadding="false"
-                          android:format12Hour="d"
-                          android:format24Hour="d"
-                          android:fontFamily="sans-serif-medium"
-                          android:textColor="#111111"
-                          android:autoSizeTextType="uniform"
-                          android:autoSizeMinTextSize="6sp"
-                          android:autoSizeMaxTextSize="40sp"
-                          android:autoSizeStepGranularity="1sp" />
-
-                      <FrameLayout
-                          android:layout_width="0dp"
-                          android:layout_height="match_parent"
-                          android:layout_weight="11.56" />
-                  </LinearLayout>
-
-                  <FrameLayout
-                      android:layout_width="match_parent"
-                      android:layout_height="0dp"
-                      android:layout_weight="44.06" />
-              </LinearLayout>
-
-              <LinearLayout
-                  android:layout_width="match_parent"
-                  android:layout_height="match_parent"
-                  android:orientation="vertical">
-
-                  <FrameLayout
-                      android:layout_width="match_parent"
-                      android:layout_height="0dp"
-                      android:layout_weight="11.06" />
-
-                  <LinearLayout
-                      android:layout_width="match_parent"
-                      android:layout_height="0dp"
-                      android:layout_weight="6.0"
-                      android:orientation="horizontal">
-
-                      <FrameLayout
-                          android:layout_width="0dp"
-                          android:layout_height="match_parent"
-                          android:layout_weight="37.19" />
-
-                      <TextClock
-                          android:layout_width="0dp"
-                          android:layout_height="match_parent"
-                          android:layout_weight="25.62"
-                          android:gravity="center"
-                          android:padding="0dp"
-                          android:includeFontPadding="false"
-                          android:format12Hour="EEEE"
-                          android:format24Hour="EEEE"
-                          android:textAllCaps="true"
-                          android:letterSpacing="0.08"
-                          android:fontFamily="sans-serif-medium"
-                          android:textColor="#111111"
-                          android:autoSizeTextType="uniform"
-                          android:autoSizeMinTextSize="5sp"
-                          android:autoSizeMaxTextSize="30sp"
-                          android:autoSizeStepGranularity="1sp" />
-
-                      <FrameLayout
-                          android:layout_width="0dp"
-                          android:layout_height="match_parent"
-                          android:layout_weight="37.19" />
-                  </LinearLayout>
-
-                  <FrameLayout
-                      android:layout_width="match_parent"
-                      android:layout_height="0dp"
-                      android:layout_weight="82.94" />
-              </LinearLayout>
+                  android:dial="@drawable/date_clear"
+                  android:hand_hour="@drawable/date_hour"
+                  android:hand_minute="@drawable/date_min"
+                  android:hand_second="@drawable/date_sec" />
           </FrameLayout>
           EOF
 
@@ -389,6 +401,7 @@ jobs:
           B=https://raw.githubusercontent.com/google/fonts/main/ofl
           curl -fsSL -o Lato-Bold.ttf $B/lato/Lato-Bold.ttf || true
           curl -fsSL -o Michroma-Regular.ttf $B/michroma/Michroma-Regular.ttf || true
+          curl -fsSL -o URWGothic-Book.otf https://raw.githubusercontent.com/ArtifexSoftware/urw-base35-fonts/master/fonts/URWGothic-Book.otf || true
           python3 - <<'PY'
           import math, os
           from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageChops
@@ -437,19 +450,8 @@ jobs:
               return C + r * math.sin(a), C - r * math.cos(a)
 
 
-          def window(d, x0, x1, y0, y1, shade):
-              for i in range(10):
-                  d.rounded_rectangle([x0 - 10 + i, y0 - 10 + i, x1 + 10 - i, y1 + 10 - i],
-                                      radius=22 - i,
-                                      fill=lerp((236, 236, 240), (120, 120, 128), i / 9) + (255,))
-              d.rounded_rectangle([x0, y0, x1, y1], radius=10, fill=(248, 248, 245, 255))
-              for i in range(shade):
-                  d.line([x0 + 8, y0 + i, x1 - 8, y0 + i],
-                         fill=lerp((196, 196, 200), (248, 248, 245), i / shade) + (255,))
-
-
           # ---------- Dials ----------
-          def classic_dial(with_date):
+          def classic_dial():
               img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
               d = ImageDraw.Draw(img)
               R_OUT, R_BEZ = 790, 745
@@ -468,14 +470,97 @@ jobs:
                   d.line([polar(r1, i * 6), polar(r2, i * 6)], fill=WHITE, width=15 if big else 6)
               font = load_font(['Lato-Bold.ttf'], 165)
               for n in range(1, 13):
-                  if with_date and n in (3, 12):
-                      continue
                   x, y = polar(515, n * 30)
                   put_number(d, str(n), x, y, font, WHITE)
-              if with_date:
-                  window(d, C + 395, C + 615, C - 95, C + 95, 14)    # date at 3 o'clock
-                  window(d, C - 205, C + 205, C - 623, C - 527, 10)  # day name at 12 o'clock
               return img
+
+
+          AG = ['URWGothic-Book.otf']
+          TEXT = (20, 20, 22, 255)
+          DATE_CX = C + 505          # centre of the date window (3 o'clock)
+          DAY_RC, DAY_HH, DAY_A = 598, 38, 22   # curved day window: radius, half height, half angle
+
+
+          def window(d, x0, x1, y0, y1, shade):
+              for i in range(10):
+                  d.rounded_rectangle([x0 - 10 + i, y0 - 10 + i, x1 + 10 - i, y1 + 10 - i],
+                                      radius=22 - i,
+                                      fill=lerp((236, 236, 240), (120, 120, 128), i / 9) + (255,))
+              d.rounded_rectangle([x0, y0, x1, y1], radius=10, fill=(248, 248, 245, 255))
+              for i in range(shade):
+                  d.line([x0 + 8, y0 + i, x1 - 8, y0 + i],
+                         fill=lerp((196, 196, 200), (248, 248, 245), i / shade) + (255,))
+
+
+          def arc_pts(r, a0, a1, n=48):
+              return [polar(r, a0 + (a1 - a0) * k / n) for k in range(n + 1)]
+
+
+          def curved_window(d, rc, hh, A):
+              r_in, r_out = rc - hh, rc + hh
+              for i in range(10):
+                  m = 10 - i
+                  a = A + math.degrees(m / rc)
+                  d.polygon(arc_pts(r_out + m, -a, a) + arc_pts(r_in - m, a, -a),
+                            fill=lerp((236, 236, 240), (120, 120, 128), i / 9) + (255,))
+              d.polygon(arc_pts(r_out, -A, A) + arc_pts(r_in, A, -A), fill=(248, 248, 245, 255))
+              for k in range(10):
+                  d.line(arc_pts(r_out - 1 - k, -A + 1.2, A - 1.2),
+                         fill=lerp((196, 196, 200), (248, 248, 245), k / 10) + (255,), width=2)
+
+
+          def date_dial():
+              img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+              d = ImageDraw.Draw(img)
+              R_OUT, R_BEZ = 790, 745
+              for r in range(R_OUT, R_BEZ, -1):
+                  t = (R_OUT - r) / (R_OUT - R_BEZ)
+                  disc(d, r, lerp((240, 240, 244), (105, 105, 114), t) + (255,))
+              disc(d, R_BEZ, (0, 0, 0, 255))
+              R_FACE = R_BEZ - 8
+              for r in range(R_FACE, 0, -2):
+                  t = ((R_FACE - r) / R_FACE) ** 1.2
+                  disc(d, r, lerp((10, 10, 12), (38, 38, 43), t) + (255,))
+              for i in range(1, 60):            # no tick at 12: the day window sits there
+                  big = (i % 5 == 0)
+                  r1 = 712
+                  r2 = r1 - (62 if big else 26)
+                  d.line([polar(r1, i * 6), polar(r2, i * 6)], fill=WHITE, width=15 if big else 6)
+              font = load_font(AG, 150)
+              for n in range(1, 13):
+                  if n in (3, 12):
+                      continue
+                  x, y = polar(498, n * 30)
+                  put_number(d, str(n), x, y, font, WHITE, stroke=2)
+              window(d, DATE_CX - 110, DATE_CX + 110, C - 95, C + 95, 14)
+              curved_window(d, DAY_RC, DAY_HH, DAY_A)
+              return img
+
+
+          def day_overlay(text):
+              layer = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+              font = load_font(AG, 54)
+              spacing = 6
+              adv = [font.getlength(ch) for ch in text]
+              total = sum(adv) + spacing * (len(text) - 1)
+              cap = font.getbbox('H')[3] - font.getbbox('H')[1]
+              pos = -total / 2
+              for ch, w in zip(text, adv):
+                  ang = math.degrees((pos + w / 2) / DAY_RC)
+                  pos += w + spacing
+                  g = Image.new('RGBA', (240, 240), (0, 0, 0, 0))
+                  ImageDraw.Draw(g).text((120, 120 + cap / 2), ch, font=font, fill=TEXT,
+                                         anchor='ms', stroke_width=1, stroke_fill=TEXT)
+                  g = g.rotate(-ang, resample=Image.BICUBIC)
+                  x, y = polar(DAY_RC, ang)
+                  layer.alpha_composite(g, (int(round(x - 120)), int(round(y - 120))))
+              return layer
+
+
+          def date_overlay(n):
+              layer = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+              put_number(ImageDraw.Draw(layer), str(n), DATE_CX, C, load_font(AG, 135), TEXT, stroke=2)
+              return layer
 
 
           def blue_dial():
@@ -563,26 +648,34 @@ jobs:
           ], dot=(16, (110, 116, 126, 255)))
 
           # ---------- Save the artwork ----------
-          d_classic = classic_dial(False)
-          d_date = classic_dial(True)
+          d_classic = classic_dial()
           d_blue = blue_dial()
           save(d_classic, 'classic_dial')
-          save(d_date, 'date_dial')
           save(d_blue, 'blue_dial')
           for name, img in (('classic_hour', classic_hour), ('classic_min', classic_min),
                             ('classic_sec', classic_sec), ('blue_hour', blue_hour),
                             ('blue_min', blue_min), ('blue_sec', blue_sec)):
               save(img, name)
 
+          # Date look: 1000 px artwork, window text swapped by day
+          d_date = date_dial()
+          save(d_date, 'date_dial', 1000)
+          save(classic_hour, 'date_hour', 1000)
+          save(classic_min, 'date_min', 1000)
+          save(classic_sec, 'date_sec', 1000)
+          DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY']
+          for i, name in enumerate(DAYS):
+              save(day_overlay(name), f'day_{i}', 1000)
+          for n in range(1, 32):
+              save(date_overlay(n), f'date_{n}', 1000)
+
 
           # ---------- Previews for the widget picker (clock at 10:10:30) ----------
-          def preview(name, dial, hands, date_text=None, day_text=None):
-              base = dial.resize((800, 800), Image.LANCZOS)
-              if date_text:
-                  dd = ImageDraw.Draw(base)
-                  put_number(dd, date_text, 400 + 252, 400, load_font(['Lato-Bold.ttf'], 74), (17, 17, 17, 255))
-                  if day_text:
-                      put_number(dd, day_text, 400, 400 - 287, load_font(['Lato-Bold.ttf'], 34), (17, 17, 17, 255))
+          def preview(name, dial, hands, overlays=()):
+              base = dial
+              for ov in overlays:
+                  base = Image.alpha_composite(base, ov)
+              base = base.resize((800, 800), Image.LANCZOS)
               for hand_img, deg in zip(hands, (10 * 30 + 5, 10 * 6 + 3, 30 * 6)):
                   h = hand_img.resize((800, 800), Image.LANCZOS).rotate(-deg, resample=Image.BICUBIC)
                   base = Image.alpha_composite(base, h)
@@ -591,7 +684,8 @@ jobs:
 
 
           preview('classic', d_classic, (classic_hour, classic_min, classic_sec))
-          preview('date', d_date, (classic_hour, classic_min, classic_sec), '19', 'MONDAY')
+          preview('date', d_date, (classic_hour, classic_min, classic_sec),
+                  (day_overlay('MONDAY'), date_overlay(19)))
           preview('blue', d_blue, (blue_hour, blue_min, blue_sec))
           PY
 
